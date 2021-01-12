@@ -32,17 +32,20 @@ const seedData = async () => {
 
 // ##############################################################
 
+const pause = async () => {
+  return await new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(new Date());
+    }, 100);
+  });
+};
+
 const run = async () => {
   await getConnection();
   await seedData();
 
   // Open a stream from the db collection find
   const dataStream = await db.collection("testdata").find({}).stream();
-
-  // What to do when the stream ends
-  dataStream.on("end", () => {
-    console.log("Done!");
-  });
 
   // Create full name transform
   const dataTransformFullName = new Transform({
@@ -66,21 +69,32 @@ const run = async () => {
   };
 
   // Define what the flatten transform does
-  dataTransformFlatten._transform = (data, enc, cb) => {
-    dataTransformFlatten.push({ flattened: `${data.id}: ${data.name}` });
+  dataTransformFlatten._transform = async (data, enc, cb) => {
+    const res = await pause(); // Async example
+    dataTransformFlatten.push({
+      flattened: `${data.id}: ${data.name}`,
+      completed: res,
+    });
     cb();
   };
 
   let count = 0;
 
+  const logOnData = (data) => {
+    count++;
+    console.log(count, data);
+  };
+
+  const handleStreamEnd = () => {
+    console.log("DONE!");
+  };
+
   // Stream
   dataStream
     .pipe(dataTransformFullName)
     .pipe(dataTransformFlatten)
-    .on("data", (data) => {
-      count++;
-      console.log(count, data);
-    });
+    .on("data", logOnData)
+    .on("end", handleStreamEnd);
 };
 
 run();
